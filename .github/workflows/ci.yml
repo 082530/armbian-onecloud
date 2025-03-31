@@ -21,7 +21,7 @@ env:
 
 permissions:
   contents: write
-  actions: write  # 新增权限
+  actions: write
 
 jobs:
   prepare:
@@ -123,16 +123,9 @@ jobs:
           body_path: Body.md
 
   build-debs:
-    name: Build ${{ matrix.BRANCH }}
+    name: Build current
     needs: prepare
     runs-on: ubuntu-22.04
-    strategy:
-      fail-fast: false
-      matrix:
-        BRANCH:
-          - edge
-          - current
-
     steps:
       - name: Import env
         run: |
@@ -159,22 +152,20 @@ jobs:
 
       - name: Build
         run: |
-          # Don't update remote cache
           export GITHUB_ACTIONS=false
           sudo --preserve-env \
             ./compile.sh kernel \
               ALLOW_ROOT=yes \
               BOARD=onecloud \
-              BRANCH=${{ matrix.BRANCH }} \
+              BRANCH=current \
               EXPERT=yes \
-              KERNEL_MAJOR_MINOR=6.1 \
               USE_CCACHE=no
           sudo chown $(id -u):$(id -g) -R output/
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: debs-${{ matrix.BRANCH }}
+          name: debs-current
           path: output/debs/*
 
       - name: Upload to release
@@ -185,23 +176,16 @@ jobs:
             output/debs/*
 
   build:
-    name: Build ${{ matrix.RELEASE }}-${{ matrix.BRANCH }}-${{ matrix.TYPE == 'desktop' && matrix.DESKTOP_ENVIRONMENT || matrix.TYPE }}
+    name: Build ${{ matrix.RELEASE }}-current-${{ matrix.TYPE == 'desktop' && matrix.DESKTOP_ENVIRONMENT || matrix.TYPE }}
     needs: [ prepare, build-debs ]
     runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
       matrix:
-        BRANCH:
-          - edge
-          - current
         RELEASE:
-          # - focal # Ubuntu 20.04 LTS
-          - jammy # Ubuntu 22.04 LTS
-          # - lunar # Ubuntu 23.04
-          # - buster # Debian 10
+          - jammy    # Ubuntu 22.04
           - bullseye # Debian 11
           - bookworm # Debian 12
-          - sid # Debian unstable
         TYPE:
           - minimal
           - cli
@@ -213,7 +197,6 @@ jobs:
             DESKTOP_APPGROUPS_SELECTED: ""
         exclude:
           - RELEASE: sid
-            TYPE: desktop
 
     steps:
       - name: Import env
@@ -242,18 +225,17 @@ jobs:
       - name: Download debs
         uses: actions/download-artifact@v4
         with:
-          name: debs-${{ matrix.BRANCH }}
+          name: debs-current
           path: output/debs/
 
       - name: Build
         run: |
-          # Don't update remote cache
           export GITHUB_ACTIONS=false
           sudo --preserve-env \
             ./compile.sh build \
               ALLOW_ROOT=yes \
               BOARD=onecloud \
-              BRANCH=${{ matrix.BRANCH }} \
+              BRANCH=current \
               RELEASE=${{ matrix.RELEASE }} \
               KERNEL_CONFIGURE=no \
               BUILD_MINIMAL=${{ matrix.TYPE == 'minimal' && 'yes' || 'no' }} \
@@ -271,7 +253,6 @@ jobs:
       - name: Install Dependents
         run: |
           sudo apt install img2simg
-
           ver="v0.3.1"
           curl -L -o ./AmlImg https://github.com/hzyitc/AmlImg/releases/download/$ver/AmlImg_${ver}_linux_amd64
           chmod +x ./AmlImg
@@ -321,7 +302,7 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.RELEASE }}-${{ matrix.BRANCH }}-${{ matrix.TYPE == 'desktop' && matrix.DESKTOP_ENVIRONMENT || matrix.TYPE }}
+          name: ${{ matrix.RELEASE }}-current-${{ matrix.TYPE == 'desktop' && matrix.DESKTOP_ENVIRONMENT || matrix.TYPE }}
           path: output/images/*
 
       - name: Generate release informations
